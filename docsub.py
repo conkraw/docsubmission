@@ -15,6 +15,17 @@ st.title("Firebase Initialization Debug")
 
 # Retrieve your Firebase key from st.secrets
 firebase_key = st.secrets.get("firebase")
+if isinstance(firebase_key, str):
+    firebase_key = firebase_key.strip()  # remove leading/trailing whitespace
+    st.write("Firebase key raw after strip:", firebase_key)
+    try:
+        firebase_creds = json.loads(firebase_key)
+    except Exception as e:
+        st.error(f"Error parsing firebase_key: {e}")
+        st.stop()
+else:
+    firebase_creds = firebase_key
+
 collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
 
 st.write("Type of firebase_key:", type(firebase_key))
