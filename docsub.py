@@ -6,6 +6,26 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
+if 'firebase_initialized' not in st.session_state:
+    firebase_key = st.secrets["firebase_service_account"]
+    cred = credentials.Certificate(json.loads(firebase_key))
+
+    try:
+        firebase_admin.initialize_app(cred)
+        st.session_state.firebase_initialized = True
+    except ValueError as e:
+        if "already exists" in str(e):
+            pass  # App is already initialized
+        else:
+            st.error(f"Failed to initialize Firebase: {str(e)}")
+
+# Access Firestore
+if 'db' not in st.session_state:
+    try:
+        st.session_state.db = firestore.client()
+    except Exception as e:
+        st.error(f"Failed to connect to Firestore: {str(e)}")
+
 # Initialize Firebase with credentials from Streamlit secrets
 cred = credentials.Certificate(st.secrets["firebase_service_account"])
 firebase_admin.initialize_app(cred)
