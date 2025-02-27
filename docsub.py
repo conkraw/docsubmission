@@ -11,49 +11,33 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-st.title("Firebase Initialization Debug")
+import streamlit as st
+import json
 
-# Retrieve your Firebase key from st.secrets
+# Get the firebase secret as a string (using triple quotes in secrets)
 firebase_key = st.secrets.get("firebase")
-if isinstance(firebase_key, str):
-    firebase_key = firebase_key.strip()  # remove leading/trailing whitespace
-    st.write("Firebase key raw after strip:", firebase_key)
-    try:
-        firebase_creds = json.loads(firebase_key)
-    except Exception as e:
-        st.error(f"Error parsing firebase_key: {e}")
-        st.stop()
-else:
-    firebase_creds = firebase_key
 
-collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
-
-st.write("Type of firebase_key:", type(firebase_key))
-st.write("Raw firebase_key value:")
+# Debug: Show raw firebase key
+st.write("Firebase key raw after strip:")
 st.text(firebase_key)
 
-# If you're using triple quotes, firebase_key will be a string with actual newline characters.
-if isinstance(firebase_key, str):
-    # Replace literal newline characters with the two-character sequence "\n"
-    firebase_key_fixed = firebase_key.replace("\n", "\\n")
-    st.write("After replacing newlines:")
-    st.text(firebase_key_fixed)
-    try:
-        firebase_creds = json.loads(firebase_key_fixed)
-    except Exception as e:
-        st.error(f"Error parsing firebase_key: {e}")
-        st.stop()
-else:
-    firebase_creds = firebase_key  # if it's already a dict
+# Strip any leading/trailing whitespace
+firebase_key = firebase_key.strip()
 
-st.write("Parsed firebase_creds keys:", list(firebase_creds.keys()))
+# Replace literal newline characters with the two-character sequence "\n"
+# This converts actual newlines into the escape sequence needed for JSON.
+firebase_key_fixed = firebase_key.replace("\n", "\\n")
+st.write("Firebase key after replacing newlines:")
+st.text(firebase_key_fixed)
 
-# Check that required keys are present
-required_keys = ["client_email", "token_uri", "private_key", "project_id"]
-missing = [key for key in required_keys if key not in firebase_creds]
-if missing:
-    st.error(f"Missing required keys in Firebase credentials: {missing}")
+# Now parse the fixed string into a dict
+try:
+    firebase_creds = json.loads(firebase_key_fixed)
+    st.write("Parsed Firebase credential keys:", list(firebase_creds.keys()))
+except Exception as e:
+    st.error(f"Error parsing firebase_key: {e}")
     st.stop()
+
 
 # Initialize Firebase
 if "firebase_initialized" not in st.session_state:
