@@ -8,7 +8,7 @@ import json
 
 if 'firebase_initialized' not in st.session_state:
     firebase_key = st.secrets["firebase_service_account"]
-    cred = credentials.Certificate(json.loads(firebase_key))
+    cred = credentials.Certificate(json.loads(firebase_key, strict=False))
 
     try:
         firebase_admin.initialize_app(cred)
