@@ -6,6 +6,10 @@ import io
 def process_file(uploaded_file):
     df = pd.read_csv(uploaded_file)
 
+    # Drop existing record_id column if present
+    if "record_id" in df.columns:
+        df = df.drop(columns=["record_id"])
+
     # Identify the column containing "email" dynamically
     email_column_name = next((col for col in df.columns if "email" in col.lower()), None)
     
@@ -13,8 +17,8 @@ def process_file(uploaded_file):
         st.error("No email column found in the uploaded file.")
         return None
 
-    # Rename the email column to record_id
-    df = df.rename(columns={email_column_name: "record_id"})
+    # Rename the email column to record_id and ensure it's a string
+    df["record_id"] = df[email_column_name].astype(str)
 
     # Move record_id to the front
     cols = ["record_id"] + [col for col in df.columns if col != "record_id"]
