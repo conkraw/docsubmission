@@ -6,29 +6,19 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
-import json
-
-st.title("Firebase Debug Test")
-
-# Retrieve Firebase credentials and collection name from secrets
 firebase_key = st.secrets.get("firebase")
-collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
+st.write("Type of firebase_key before conversion:", type(firebase_key))
 
-# Debug output: type and keys of firebase_key
-st.write("Type of firebase_key:", type(firebase_key))
-if hasattr(firebase_key, "to_dict"):
-    firebase_key = firebase_key.to_dict()
+# If it's a string, convert it to a dict.
+if isinstance(firebase_key, str):
+    try:
+        firebase_key = json.loads(firebase_key)
+    except Exception as e:
+        st.error(f"Error parsing firebase_key: {e}")
+        st.stop()
+
+st.write("After conversion, type:", type(firebase_key))
 st.write("Firebase key keys:", list(firebase_key.keys()))
-
-# Check for required keys
-required_keys = ["client_email", "token_uri", "private_key", "project_id"]
-missing = [key for key in required_keys if key not in firebase_key]
-if missing:
-    st.error(f"Missing required keys in Firebase credentials: {missing}")
-    st.stop()
 
 # Initialize Firebase only once
 if "firebase_initialized" not in st.session_state:
