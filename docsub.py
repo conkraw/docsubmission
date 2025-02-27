@@ -6,60 +6,53 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-# --- Firebase Initialization ---
-# Get Firebase credentials and collection name from st.secrets
-firebase_key = st.secrets.get("firebase")
-st.write("Type of firebase_key:", type(firebase_key))
-st.write("Firebase key content:", firebase_key)
-if hasattr(firebase_key, "to_dict"):
-    firebase_key = firebase_key.to_dict()
-st.write("After conversion, type:", type(firebase_key))
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, firestore
+import json
 
+st.title("Firebase Debug Test")
+
+# Retrieve Firebase credentials and collection name from secrets
+firebase_key = st.secrets.get("firebase")
 collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
 
-if firebase_key is None:
-    st.error("FIREBASE_KEY is missing in st.secrets!")
-    st.stop()
-if collection_name is None:
-    st.error("FIREBASE_COLLECTION_NAME is missing in st.secrets!")
+# Debug output: type and keys of firebase_key
+st.write("Type of firebase_key:", type(firebase_key))
+if hasattr(firebase_key, "to_dict"):
+    firebase_key = firebase_key.to_dict()
+st.write("Firebase key keys:", list(firebase_key.keys()))
+
+# Check for required keys
+required_keys = ["client_email", "token_uri", "private_key", "project_id"]
+missing = [key for key in required_keys if key not in firebase_key]
+if missing:
+    st.error(f"Missing required keys in Firebase credentials: {missing}")
     st.stop()
 
-# If firebase_key is a dict (from TOML), use it directly; if it's a string, parse it.
-if isinstance(firebase_key, dict):
-    firebase_creds = firebase_key
-elif isinstance(firebase_key, str):
-    try:
-        # Replace escaped newlines with actual newlines before parsing.
-        firebase_creds = json.loads(firebase_key.replace("\\n", "\n"))
-    except Exception as e:
-        st.error(f"Error parsing FIREBASE_KEY: {e}")
-        st.stop()
-else:
-    st.error("FIREBASE_KEY must be a dict or a JSON-formatted string.")
-    st.stop()
-
-# Initialize Firebase only once.
+# Initialize Firebase only once
 if "firebase_initialized" not in st.session_state:
     try:
-        cred = credentials.Certificate(firebase_creds)
+        cred = credentials.Certificate(firebase_key)
         firebase_admin.initialize_app(cred)
         st.session_state["firebase_initialized"] = True
-    except ValueError as e:
-        if "already exists" in str(e):
-            st.session_state["firebase_initialized"] = True
-        else:
-            st.error(f"Error initializing Firebase: {e}")
-            st.stop()
+        st.write("Firebase initialized successfully!")
+    except Exception as e:
+        st.error(f"Error initializing Firebase: {e}")
+        st.stop()
 
-# Get Firestore client.
+# Get Firestore client
 if "db" not in st.session_state:
     try:
         st.session_state["db"] = firestore.client()
+        st.write("Firestore client created.")
     except Exception as e:
         st.error(f"Error connecting to Firestore: {e}")
         st.stop()
 
 db = st.session_state["db"]
+
+st.write("Collection name:", collection_name)
 
 # --- Function to Upload a Record ---
 def upload_record(document_id, data):
