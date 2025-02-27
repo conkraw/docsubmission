@@ -6,21 +6,31 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, firestore
+import json
+
+st.title("Firebase Debug Test")
+
+# Retrieve the firebase secret from st.secrets
 firebase_key = st.secrets.get("firebase")
+collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
+
 st.write("Type of firebase_key before conversion:", type(firebase_key))
-
-# If it's a string, convert it to a dict.
-if isinstance(firebase_key, str):
-    try:
-        firebase_key = json.loads(firebase_key)
-    except Exception as e:
-        st.error(f"Error parsing firebase_key: {e}")
-        st.stop()
-
-st.write("After conversion, type:", type(firebase_key))
+# If it's an AttrDict, convert to a normal dict.
+if hasattr(firebase_key, "to_dict"):
+    firebase_key = firebase_key.to_dict()
 st.write("Firebase key keys:", list(firebase_key.keys()))
 
-# Initialize Firebase only once
+# Check for required keys
+required_keys = ["client_email", "token_uri", "private_key", "project_id"]
+missing = [key for key in required_keys if key not in firebase_key]
+if missing:
+    st.error(f"Missing required keys in Firebase credentials: {missing}")
+    st.stop()
+
+# Initialize Firebase (only once)
 if "firebase_initialized" not in st.session_state:
     try:
         cred = credentials.Certificate(firebase_key)
@@ -31,7 +41,7 @@ if "firebase_initialized" not in st.session_state:
         st.error(f"Error initializing Firebase: {e}")
         st.stop()
 
-# Get Firestore client
+# Create Firestore client
 if "db" not in st.session_state:
     try:
         st.session_state["db"] = firestore.client()
@@ -39,6 +49,8 @@ if "db" not in st.session_state:
     except Exception as e:
         st.error(f"Error connecting to Firestore: {e}")
         st.stop()
+
+st.write("Collection name:", collection_name)
 
 db = st.session_state["db"]
 
