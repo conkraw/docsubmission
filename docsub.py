@@ -2,9 +2,22 @@ import streamlit as st
 import pandas as pd
 import io
 
-# Load the record_id mapping from Streamlit secrets
+# Function to extract the record_id mapping from secrets
 def get_record_id_mapping():
-    return st.secrets["dataset"]  # Ensure this is a dictionary in .streamlit/secrets.toml
+    try:
+        dataset = st.secrets["dataset"]["data"]  # Accessing the list of dictionaries
+        mapping = {}
+
+        for entry in dataset:
+            if "email" in entry and "record_id" in entry:
+                mapping[entry["email"]] = entry["record_id"]
+            if "email_2" in entry and "record_id" in entry:
+                mapping[entry["email_2"]] = entry["record_id"]
+
+        return mapping
+    except KeyError:
+        st.error("Error: Secrets structure is incorrect.")
+        return {}
 
 # Function to process the uploaded file
 def process_file(uploaded_file, record_id_mapping):
@@ -17,10 +30,10 @@ def process_file(uploaded_file, record_id_mapping):
 
     # Drop existing record_id column if present
     if 'record_id' in df.columns:
-        df = df.drop(columns=['Record ID'])
+        df = df.drop(columns=['record_id'])
 
-    # Get the email column (4th column, index 3)
-    email_column_name = df.columns[4]
+    # Identify email column (3rd column, index 2)
+    email_column_name = df.columns[2]
     
     # Map emails to new record_id
     df['record_id'] = df[email_column_name].map(record_id_mapping)
@@ -56,3 +69,4 @@ if uploaded_file:
             file_name="processed_file.csv",
             mime="text/csv"
         )
+
