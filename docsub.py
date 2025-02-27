@@ -6,15 +6,28 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-# Load Firebase credentials from Streamlit secrets
+# Check if Firebase credentials are available
+if "firebase" not in st.secrets or "FIREBASE_COLLECTION_NAME" not in st.secrets:
+    st.error("Firebase credentials are missing! Add them to .streamlit/secrets.toml or Streamlit Cloud Secrets Manager.")
+    st.stop()
+
+# Load Firebase credentials
+firebase_creds = st.secrets["firebase"]
+
 if not firebase_admin._apps:
-    firebase_creds = json.loads(st.secrets["firebase"])
-    cred = credentials.Certificate(firebase_creds)
+    cred = credentials.Certificate(json.loads(json.dumps(firebase_creds)))
     firebase_admin.initialize_app(cred)
 
 # Firestore reference
 firestore_db = firestore.client()
 collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]
+
+# Test Firestore connection
+try:
+    firestore_db.collection(collection_name).limit(1).get()
+    st.success("Connected to Firestore successfully!")
+except Exception as e:
+    st.error(f"Firestore connection failed: {e}")
 
 # Load existing processed records from Firestore
 def load_processed_records():
