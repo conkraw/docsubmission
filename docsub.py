@@ -14,7 +14,7 @@ if not firebase_admin._apps:
 
 # Firestore reference
 firestore_db = firestore.client()
-collection_name = st.secrets["FIRESTORE_COLLECTION"]
+collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]
 
 # Load existing processed records from Firestore
 def load_processed_records():
