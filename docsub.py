@@ -2,7 +2,8 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
-from utils.firebase_operations import initialize_firebase, upload_to_firebase, fetch_processed_records
+import firebase_admin
+from firebase_admin import credentials, firestore, storage
 
 # Initialize Firebase
 db = initialize_firebase()
