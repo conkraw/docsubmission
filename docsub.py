@@ -4,7 +4,7 @@ import io
 
 # Load the record_id mapping from Streamlit secrets
 def get_record_id_mapping():
-    return st.secrets["record_id_mapping"]  # Ensure this is a dictionary in .streamlit/secrets.toml
+    return st.secrets["dataset"]  # Ensure this is a dictionary in .streamlit/secrets.toml
 
 # Function to process the uploaded file
 def process_file(uploaded_file, record_id_mapping):
