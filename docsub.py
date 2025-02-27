@@ -2,17 +2,22 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
-import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from utils.firebase_operations import initialize_firebase, upload_to_firebase
 
-# Initialize Firebase
+# Initialize Firebase and Firestore
 db = initialize_firebase()
 
-# Load processed records from Firestore
-processed_records = fetch_processed_records(db)
-processed_records_df = pd.DataFrame.from_dict(processed_records, orient="index") if processed_records else pd.DataFrame()
+# Function to load processed records from Firestore
+def load_processed_records():
+    collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]  # Ensure collection name is set
+    docs = db.collection(collection_name).stream()
+    records = {doc.id: doc.to_dict() for doc in docs}
+    return pd.DataFrame.from_dict(records, orient="index") if records else pd.DataFrame()
 
-# Function to process uploaded file
+# Load processed records at the start
+processed_records_df = load_processed_records()
+
+# Function to process the uploaded file
 def process_file(uploaded_file):
     df = pd.read_csv(uploaded_file)
 
@@ -110,7 +115,7 @@ if uploaded_file:
 
 # Button to clear processed records in Firestore
 if st.button("Clear Processed Records"):
-    docs = db.collection(FIREBASE_COLLECTION_NAME).stream()
+    docs = db.collection(st.secrets["FIREBASE_COLLECTION_NAME"]).stream()
     for doc in docs:
         doc.reference.delete()
     processed_records_df = pd.DataFrame()
