@@ -3,41 +3,32 @@ import pandas as pd
 import io
 import pytz
 import firebase_admin
-from firebase_admin import credentials, db
+from firebase_admin import credentials, firestore
 import json
-import os
 
 # Load Firebase credentials from Streamlit secrets
 if not firebase_admin._apps:
-    firebase_creds = json.loads(st.secrets["firebase"]["private_key"].replace("\\n", "\n"))
-    cred = credentials.Certificate({
-        "type": "service_account",
-        "project_id": st.secrets["firebase"]["project_id"],
-        "private_key_id": st.secrets["firebase"]["private_key_id"],
-        "private_key": firebase_creds,
-        "client_email": st.secrets["firebase"]["client_email"],
-        "client_id": st.secrets["firebase"]["client_id"],
-        "auth_uri": st.secrets["firebase"]["auth_uri"],
-        "token_uri": st.secrets["firebase"]["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
-        "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"],
-    })
-    firebase_admin.initialize_app(cred, {"databaseURL": st.secrets["firebase"]["database_url"]})
+    firebase_creds = json.loads(st.secrets["firebase"])
+    cred = credentials.Certificate(firebase_creds)
+    firebase_admin.initialize_app(cred)
 
-# Firebase reference
-firebase_ref = db.reference("processed_records")
+# Firestore reference
+firestore_db = firestore.client()
+collection_name = st.secrets["FIRESTORE_COLLECTION"]
 
-# Load existing processed records from Firebase
+# Load existing processed records from Firestore
 def load_processed_records():
-    data = firebase_ref.get()
-    if data:
-        return pd.DataFrame.from_dict(data, orient="index")
+    docs = firestore_db.collection(collection_name).stream()
+    records = {doc.id: doc.to_dict() for doc in docs}
+    if records:
+        return pd.DataFrame.from_dict(records, orient="index")
     return pd.DataFrame()
 
-# Function to save processed records to Firebase
+# Function to save processed records to Firestore
 def save_processed_records(df):
-    records_dict = df.to_dict(orient="index")
-    firebase_ref.set(records_dict)
+    for _, row in df.iterrows():
+        doc_id = row["record_id"]
+        firestore_db.collection(collection_name).document(doc_id).set(row.to_dict())
 
 # Load processed records at the start
 processed_records = load_processed_records()
@@ -115,13 +106,13 @@ def process_file(uploaded_file):
         )
         processed_records = processed_records.drop(columns=["timestamp_sort"])
 
-    # Save processed records to Firebase
+    # Save processed records to Firestore
     save_processed_records(processed_records)
 
     return processed_records
 
 # Streamlit App
-st.title("CSV Processor with Firebase Storage")
+st.title("CSV Processor with Firestore Storage")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
@@ -144,8 +135,11 @@ if uploaded_file:
             mime="text/csv"
         )
 
-# Button to clear processed records in Firebase
+# Button to clear processed records in Firestore
 if st.button("Clear Processed Records"):
-    firebase_ref.delete()
+    docs = firestore_db.collection(collection_name).stream()
+    for doc in docs:
+        doc.reference.delete()
     processed_records = pd.DataFrame()
-    st.success("Processed records cleared in Firebase!")
+    st.success("Processed records cleared in Firestore!")
+
