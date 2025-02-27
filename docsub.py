@@ -2,6 +2,22 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# Initialize Firebase with credentials from Streamlit secrets
+cred = credentials.Certificate(st.secrets["firebase_service_account"])
+firebase_admin.initialize_app(cred)
+db = firestore.client()
+
+# Functions to check and update processed record_ids in Firestore
+def is_record_processed(record_id):
+    doc_ref = db.collection("processed_records").document(record_id)
+    return doc_ref.get().exists
+
+def mark_record_as_processed(record_id):
+    doc_ref = db.collection("processed_records").document(record_id)
+    doc_ref.set({"processed": True})
 
 # Function to process the uploaded file
 def process_file(uploaded_file):
@@ -20,6 +36,13 @@ def process_file(uploaded_file):
 
     # Rename the email column to record_id and ensure it's a string
     df["record_id"] = df[email_column_name].astype(str)
+
+    # Filter out record_ids that have been processed already
+    df = df[~df["record_id"].apply(is_record_processed)]
+    
+    if df.empty:
+        st.info("All record_ids in this file have already been processed.")
+        return None
 
     # Move record_id to the front
     cols = ["record_id"] + [col for col in df.columns if col != "record_id"]
@@ -57,10 +80,14 @@ def process_file(uploaded_file):
         df = df.sort_values(by="timestamp_sort", ascending=False).drop_duplicates(subset=["record_id"], keep="first")
         df = df.drop(columns=["timestamp_sort"])  # Remove the helper column after sorting
 
+    # After processing, mark each new record_id as processed in Firebase
+    for record_id in df["record_id"]:
+        mark_record_as_processed(record_id)
+
     return df
 
 # Streamlit App
-st.title("CSV Processor")
+st.title("CSV Processor with Firebase Record Check")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
