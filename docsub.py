@@ -17,7 +17,7 @@ def process_file(uploaded_file, record_id_mapping):
 
     # Drop existing record_id column if present
     if 'record_id' in df.columns:
-        df = df.drop(columns=['record_id'])
+        df = df.drop(columns=['Record ID'])
 
     # Get the email column (4th column, index 3)
     email_column_name = df.columns[3]
