@@ -4,6 +4,7 @@ import io
 import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
+import json
 
 # Initialize Firebase with credentials from Streamlit secrets
 service_account_info = json.loads(st.secrets["firebase_service_account"])
