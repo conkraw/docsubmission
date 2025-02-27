@@ -2,51 +2,16 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
-import firebase_admin
-from firebase_admin import credentials, firestore
-import json
+from utils.firebase_operations import initialize_firebase, upload_to_firebase, fetch_processed_records
 
-# Check if Firebase credentials are available
-if "firebase" not in st.secrets or "FIREBASE_COLLECTION_NAME" not in st.secrets:
-    st.error("Firebase credentials are missing! Add them to .streamlit/secrets.toml or Streamlit Cloud Secrets Manager.")
-    st.stop()
+# Initialize Firebase
+db = initialize_firebase()
 
-# Load Firebase credentials
-firebase_creds = st.secrets["firebase"]
+# Load processed records from Firestore
+processed_records = fetch_processed_records(db)
+processed_records_df = pd.DataFrame.from_dict(processed_records, orient="index") if processed_records else pd.DataFrame()
 
-if not firebase_admin._apps:
-    cred = credentials.Certificate(json.loads(json.dumps(firebase_creds)))
-    firebase_admin.initialize_app(cred)
-
-# Firestore reference
-firestore_db = firestore.client()
-collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]
-
-# Test Firestore connection
-try:
-    firestore_db.collection(collection_name).limit(1).get()
-    st.success("Connected to Firestore successfully!")
-except Exception as e:
-    st.error(f"Firestore connection failed: {e}")
-
-# Load existing processed records from Firestore
-def load_processed_records():
-    docs = firestore_db.collection(collection_name).stream()
-    records = {doc.id: doc.to_dict() for doc in docs}
-    if records:
-        return pd.DataFrame.from_dict(records, orient="index")
-    return pd.DataFrame()
-
-# Function to save processed records to Firestore
-def save_processed_records(df):
-    for _, row in df.iterrows():
-        doc_id = row["record_id"]
-        firestore_db.collection(collection_name).document(doc_id).set(row.to_dict())
-
-# Load processed records at the start
-processed_records = load_processed_records()
-
-# Function to process the uploaded file
+# Function to process uploaded file
 def process_file(uploaded_file):
     df = pd.read_csv(uploaded_file)
 
@@ -54,78 +19,72 @@ def process_file(uploaded_file):
     if "record_id" in df.columns:
         df = df.drop(columns=["record_id"])
 
-    # Identify the email column dynamically
+    # Identify email column dynamically
     email_column_name = next((col for col in df.columns if "email" in col.lower()), None)
     
     if email_column_name is None:
         st.error("No email column found in the uploaded file.")
         return None
 
-    # Rename the email column to record_id and ensure it's a string
+    # Rename email column to record_id
     df["record_id"] = df[email_column_name].astype(str)
 
     # Move record_id to the front
     cols = ["record_id"] + [col for col in df.columns if col != "record_id"]
     df = df[cols]
 
-    # Handle timestamp conversion for both possible columns
+    # Handle timestamp conversion
     timestamp_mapping = {
         "documentation_submission_1_timestamp": "peddoclate1",
         "documentation_submission_2_timestamp": "peddoclate2"
     }
 
-    timestamp_col = None  # Track which timestamp column is used
-
+    timestamp_col = None
     for original_col, new_col in timestamp_mapping.items():
         if original_col in df.columns:
-            # Rename the column
             df = df.rename(columns={original_col: new_col})
-            timestamp_col = new_col  # Store the selected timestamp column
+            timestamp_col = new_col
 
-            # Convert to datetime
             df[new_col] = pd.to_datetime(df[new_col], errors="coerce")
-
-            # Convert from UTC to Eastern Time
             df[new_col] = df[new_col].dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
-
-            # Format the datetime
             df[new_col] = df[new_col].dt.strftime("%m-%d-%Y %H:%M")
 
-    # Drop the original email column before downloading
+    # Drop email column
     df = df.drop(columns=[email_column_name])
 
-    # Identify new records that haven't been processed
-    global processed_records
-    if not processed_records.empty:
-        new_records = df[~df["record_id"].isin(processed_records["record_id"])]
+    # Identify new records
+    global processed_records_df
+    if not processed_records_df.empty:
+        new_records = df[~df["record_id"].isin(processed_records_df["record_id"])]
     else:
         new_records = df
 
     if new_records.empty:
         st.warning("No new records to process. All record_ids have already been processed.")
-        return processed_records
+        return processed_records_df
 
-    # Append new records to the processed records
-    processed_records = pd.concat([processed_records, new_records])
+    # Merge with existing records
+    processed_records_df = pd.concat([processed_records_df, new_records])
 
-    # If there are duplicate record_ids, keep the one with the latest (max) timestamp
+    # Keep the latest timestamp record
     if timestamp_col:
-        processed_records["timestamp_sort"] = pd.to_datetime(
-            processed_records[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce"
+        processed_records_df["timestamp_sort"] = pd.to_datetime(
+            processed_records_df[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce"
         )
-        processed_records = (
-            processed_records.sort_values(by="timestamp_sort", ascending=False)
+        processed_records_df = (
+            processed_records_df.sort_values(by="timestamp_sort", ascending=False)
             .drop_duplicates(subset=["record_id"], keep="first")
         )
-        processed_records = processed_records.drop(columns=["timestamp_sort"])
+        processed_records_df = processed_records_df.drop(columns=["timestamp_sort"])
 
-    # Save processed records to Firestore
-    save_processed_records(processed_records)
+    # Upload new records to Firestore
+    for _, row in processed_records_df.iterrows():
+        upload_to_firebase(db, row["record_id"], row.to_dict())
 
-    return processed_records
+    return processed_records_df
 
 # Streamlit App
-st.title("CSV Processor with Firestore Storage")
+st.title("CSV Processor with Firestore")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
@@ -150,9 +109,9 @@ if uploaded_file:
 
 # Button to clear processed records in Firestore
 if st.button("Clear Processed Records"):
-    docs = firestore_db.collection(collection_name).stream()
+    docs = db.collection(FIREBASE_COLLECTION_NAME).stream()
     for doc in docs:
         doc.reference.delete()
-    processed_records = pd.DataFrame()
+    processed_records_df = pd.DataFrame()
     st.success("Processed records cleared in Firestore!")
 
