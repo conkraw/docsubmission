@@ -2,6 +2,45 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
+import firebase_admin
+from firebase_admin import credentials, db
+import json
+import os
+
+# Load Firebase credentials from Streamlit secrets
+if not firebase_admin._apps:
+    firebase_creds = json.loads(st.secrets["firebase"]["private_key"].replace("\\n", "\n"))
+    cred = credentials.Certificate({
+        "type": "service_account",
+        "project_id": st.secrets["firebase"]["project_id"],
+        "private_key_id": st.secrets["firebase"]["private_key_id"],
+        "private_key": firebase_creds,
+        "client_email": st.secrets["firebase"]["client_email"],
+        "client_id": st.secrets["firebase"]["client_id"],
+        "auth_uri": st.secrets["firebase"]["auth_uri"],
+        "token_uri": st.secrets["firebase"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"],
+    })
+    firebase_admin.initialize_app(cred, {"databaseURL": st.secrets["firebase"]["database_url"]})
+
+# Firebase reference
+firebase_ref = db.reference("processed_records")
+
+# Load existing processed records from Firebase
+def load_processed_records():
+    data = firebase_ref.get()
+    if data:
+        return pd.DataFrame.from_dict(data, orient="index")
+    return pd.DataFrame()
+
+# Function to save processed records to Firebase
+def save_processed_records(df):
+    records_dict = df.to_dict(orient="index")
+    firebase_ref.set(records_dict)
+
+# Load processed records at the start
+processed_records = load_processed_records()
 
 # Function to process the uploaded file
 def process_file(uploaded_file):
@@ -51,16 +90,38 @@ def process_file(uploaded_file):
     # Drop the original email column before downloading
     df = df.drop(columns=[email_column_name])
 
+    # Identify new records that haven't been processed
+    global processed_records
+    if not processed_records.empty:
+        new_records = df[~df["record_id"].isin(processed_records["record_id"])]
+    else:
+        new_records = df
+
+    if new_records.empty:
+        st.warning("No new records to process. All record_ids have already been processed.")
+        return processed_records
+
+    # Append new records to the processed records
+    processed_records = pd.concat([processed_records, new_records])
+
     # If there are duplicate record_ids, keep the one with the latest (max) timestamp
     if timestamp_col:
-        df["timestamp_sort"] = pd.to_datetime(df[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce")
-        df = df.sort_values(by="timestamp_sort", ascending=False).drop_duplicates(subset=["record_id"], keep="first")
-        df = df.drop(columns=["timestamp_sort"])  # Remove the helper column after sorting
+        processed_records["timestamp_sort"] = pd.to_datetime(
+            processed_records[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce"
+        )
+        processed_records = (
+            processed_records.sort_values(by="timestamp_sort", ascending=False)
+            .drop_duplicates(subset=["record_id"], keep="first")
+        )
+        processed_records = processed_records.drop(columns=["timestamp_sort"])
 
-    return df
+    # Save processed records to Firebase
+    save_processed_records(processed_records)
+
+    return processed_records
 
 # Streamlit App
-st.title("CSV Processor")
+st.title("CSV Processor with Firebase Storage")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
@@ -82,3 +143,9 @@ if uploaded_file:
             file_name="processed_file.csv",
             mime="text/csv"
         )
+
+# Button to clear processed records in Firebase
+if st.button("Clear Processed Records"):
+    firebase_ref.delete()
+    processed_records = pd.DataFrame()
+    st.success("Processed records cleared in Firebase!")
