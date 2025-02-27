@@ -2,125 +2,83 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
-import firebase_admin
-from firebase_admin import credentials, firestore
-import json
 
-import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
-import json
+# Function to process the uploaded file
+def process_file(uploaded_file):
+    df = pd.read_csv(uploaded_file)
 
-import streamlit as st
-import json
+    # Drop existing record_id column if present
+    if "record_id" in df.columns:
+        df = df.drop(columns=["record_id"])
 
-# Get the firebase secret as a string (using triple quotes in secrets)
-firebase_key = st.secrets.get("firebase")
+    # Identify the email column dynamically
+    email_column_name = next((col for col in df.columns if "email" in col.lower()), None)
+    
+    if email_column_name is None:
+        st.error("No email column found in the uploaded file.")
+        return None
 
-# Debug: Show raw firebase key
-st.write("Firebase key raw after strip:")
-st.text(firebase_key)
+    # Rename the email column to record_id and ensure it's a string
+    df["record_id"] = df[email_column_name].astype(str)
 
-# Strip any leading/trailing whitespace
-firebase_key = firebase_key.strip()
+    # Move record_id to the front
+    cols = ["record_id"] + [col for col in df.columns if col != "record_id"]
+    df = df[cols]
 
-# Replace literal newline characters with the two-character sequence "\n"
-# This converts actual newlines into the escape sequence needed for JSON.
-firebase_key_fixed = firebase_key.replace("\n", "\\n")
-st.write("Firebase key after replacing newlines:")
-st.text(firebase_key_fixed)
+    # Handle timestamp conversion for both possible columns
+    timestamp_mapping = {
+        "documentation_submission_1_timestamp": "peddoclate1",
+        "documentation_submission_2_timestamp": "peddoclate2"
+    }
 
-# Now parse the fixed string into a dict
-try:
-    firebase_creds = json.loads(firebase_key_fixed)
-    st.write("Parsed Firebase credential keys:", list(firebase_creds.keys()))
-except Exception as e:
-    st.error(f"Error parsing firebase_key: {e}")
-    st.stop()
+    timestamp_col = None  # Track which timestamp column is used
 
+    for original_col, new_col in timestamp_mapping.items():
+        if original_col in df.columns:
+            # Rename the column
+            df = df.rename(columns={original_col: new_col})
+            timestamp_col = new_col  # Store the selected timestamp column
 
-# Initialize Firebase
-if "firebase_initialized" not in st.session_state:
-    try:
-        cred = credentials.Certificate(firebase_creds)
-        firebase_admin.initialize_app(cred)
-        st.session_state["firebase_initialized"] = True
-        st.write("Firebase initialized successfully!")
-    except Exception as e:
-        st.error(f"Error initializing Firebase: {e}")
-        st.stop()
+            # Convert to datetime
+            df[new_col] = pd.to_datetime(df[new_col], errors="coerce")
 
-# Create Firestore client
-if "db" not in st.session_state:
-    try:
-        st.session_state["db"] = firestore.client()
-        st.write("Firestore client created.")
-    except Exception as e:
-        st.error(f"Error connecting to Firestore: {e}")
-        st.stop()
+            # Convert from UTC to Eastern Time
+            df[new_col] = df[new_col].dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
 
-st.write("Collection name:", collection_name)
+            # Format the datetime
+            df[new_col] = df[new_col].dt.strftime("%m-%d-%Y %H:%M")
 
-db = st.session_state["db"]
+    # Drop the original email column before downloading
+    df = df.drop(columns=[email_column_name])
 
-st.write("Collection name:", collection_name)
+    # If there are duplicate record_ids, keep the one with the latest (max) timestamp
+    if timestamp_col:
+        df["timestamp_sort"] = pd.to_datetime(df[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce")
+        df = df.sort_values(by="timestamp_sort", ascending=False).drop_duplicates(subset=["record_id"], keep="first")
+        df = df.drop(columns=["timestamp_sort"])  # Remove the helper column after sorting
 
-# --- Function to Upload a Record ---
-def upload_record(document_id, data):
-    try:
-        db.collection(collection_name).document(document_id).set(data, merge=True)
-    except Exception as e:
-        st.error(f"Error uploading record {document_id}: {e}")
+    return df
 
-# --- Main App Code ---
-st.title("CSV Processor with Firebase Integration")
+# Streamlit App
+st.title("CSV Processor")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file:
-    df = pd.read_csv(uploaded_file)
+    df_processed = process_file(uploaded_file)
 
-    # Remove any existing 'record_id' column.
-    if "record_id" in df.columns:
-        df = df.drop(columns=["record_id"])
+    if df_processed is not None:
+        st.success("File processed successfully!")
+        st.dataframe(df_processed)
 
-    # Identify an email column (first column with "email", case-insensitive).
-    email_column = next((col for col in df.columns if "email" in col.lower()), None)
-    if email_column is None:
-        st.error("No email column found in the CSV file.")
-    else:
-        # Rename the email column to 'record_id'.
-        df["record_id"] = df[email_column].astype(str)
-        # Move 'record_id' to the front.
-        cols = ["record_id"] + [col for col in df.columns if col != "record_id"]
-        df = df[cols]
-
-        # Handle timestamp conversion.
-        timestamp_mapping = {
-            "documentation_submission_1_timestamp": "peddoclate1",
-            "documentation_submission_2_timestamp": "peddoclate2"
-        }
-        for orig, new in timestamp_mapping.items():
-            if orig in df.columns:
-                df = df.rename(columns={orig: new})
-                df[new] = pd.to_datetime(df[new], errors="coerce")
-                df[new] = df[new].dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
-                df[new] = df[new].dt.strftime("%m-%d-%Y %H:%M")
-
-        # Drop the original email column.
-        df = df.drop(columns=[email_column])
-
-        # Upload each record to Firestore using 'record_id' as the document ID.
-        for _, row in df.iterrows():
-            document_id = row["record_id"]
-            data = row.to_dict()
-            upload_record(document_id, data)
-
-        st.success("CSV processed and data uploaded to Firebase successfully!")
-
-        # Provide a download button for the processed CSV.
+        # Prepare for download
         buffer = io.BytesIO()
-        df.to_csv(buffer, index=False)
+        df_processed.to_csv(buffer, index=False)
         buffer.seek(0)
-        st.download_button("Download Processed CSV", buffer, file_name="processed_file.csv", mime="text/csv")
-
+        
+        st.download_button(
+            label="Download Processed CSV",
+            data=buffer,
+            file_name="processed_file.csv",
+            mime="text/csv"
+        )
