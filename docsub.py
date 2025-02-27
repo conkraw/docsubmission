@@ -2,14 +2,38 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
-from utils.firebase_operations import initialize_firebase, upload_to_firebase
+import firebase_admin
+from firebase_admin import credentials, firestore
+import json
 
-# Initialize Firebase and Firestore
-db = initialize_firebase()
+# Initialize Firebase once using session_state
+if "firebase_initialized" not in st.session_state:
+    try:
+        firebase_key = st.secrets["FIREBASE_KEY"]
+        cred = credentials.Certificate(json.loads(firebase_key))
+        firebase_admin.initialize_app(cred)
+        st.session_state.firebase_initialized = True
+    except ValueError as e:
+        if "already exists" in str(e):
+            st.session_state.firebase_initialized = True  # Firebase already initialized
+        else:
+            st.error(f"🔥 Failed to initialize Firebase: {str(e)}")
+            st.stop()
+
+# Ensure Firestore client is available
+if "db" not in st.session_state:
+    try:
+        st.session_state.db = firestore.client()
+    except Exception as e:
+        st.error(f"🔥 Failed to connect to Firestore: {str(e)}")
+        st.stop()
+
+# Access Firestore client from session state
+db = st.session_state.db
 
 # Function to load processed records from Firestore
 def load_processed_records():
-    collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]  # Ensure collection name is set
+    collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]  # Get collection name
     docs = db.collection(collection_name).stream()
     records = {doc.id: doc.to_dict() for doc in docs}
     return pd.DataFrame.from_dict(records, orient="index") if records else pd.DataFrame()
@@ -85,7 +109,7 @@ def process_file(uploaded_file):
 
     # Upload new records to Firestore
     for _, row in processed_records_df.iterrows():
-        upload_to_firebase(db, row["record_id"], row.to_dict())
+        db.collection(st.secrets["FIREBASE_COLLECTION_NAME"]).document(row["record_id"]).set(row.to_dict(), merge=True)
 
     return processed_records_df
 
@@ -98,7 +122,7 @@ if uploaded_file:
     df_processed = process_file(uploaded_file)
 
     if df_processed is not None:
-        st.success("File processed successfully!")
+        st.success("✅ File processed successfully!")
         st.dataframe(df_processed)
 
         # Prepare for download
@@ -119,5 +143,6 @@ if st.button("Clear Processed Records"):
     for doc in docs:
         doc.reference.delete()
     processed_records_df = pd.DataFrame()
-    st.success("Processed records cleared in Firestore!")
+    st.success("✅ Processed records cleared in Firestore!")
+
 
