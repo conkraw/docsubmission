@@ -10,6 +10,10 @@ import json
 # Get Firebase credentials and collection name from st.secrets
 firebase_key = st.secrets.get("firebase")
 st.write("Type of firebase_key:", type(firebase_key))
+if hasattr(firebase_key, "to_dict"):
+    firebase_key = firebase_key.to_dict()
+
+st.write("After conversion, type of firebase_key:", type(firebase_key))
 collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
 
 if firebase_key is None:
