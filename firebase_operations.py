@@ -1,67 +1,67 @@
-import os
-import json
+# firebase_operations.py
+import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import firebase_admin
-from firebase_admin import credentials, firestore, storage
-from dotenv import load_dotenv
-import streamlit as st
-
-# Load environment variables from .env
-load_dotenv()
+import os
+import json
 
 # Define a global variable
-FIREBASE_COLLECTION_NAME = os.getenv("FIREBASE_COLLECTION_NAME") or st.secrets.get("FIREBASE_COLLECTION_NAME")
+FIREBASE_COLLECTION_NAME = None
 
-# Initialize Firebase only once
-if "firebase_initialized" not in st.session_state:
-    firebase_key = os.getenv("FIREBASE_KEY") or st.secrets.get("FIREBASE_KEY")
+# Initialize Firebase
+def initialize_firebase():
+    global FIREBASE_COLLECTION_NAME  # Use the global variable
 
-    if firebase_key is None:
-        raise ValueError("❌ FIREBASE_KEY environment variable is missing!")
+    FIREBASE_KEY_JSON = os.getenv('FIREBASE_KEY')
+    FIREBASE_COLLECTION_NAME = os.getenv('FIREBASE_COLLECTION_NAME')
+    
+    if FIREBASE_KEY_JSON is None:
+        raise ValueError("FIREBASE_KEY environment variable not set.")
 
     try:
-        cred = credentials.Certificate(json.loads(firebase_key))
-        firebase_admin.initialize_app(cred)
-        st.session_state.firebase_initialized = True
-    except ValueError as e:
-        if "already exists" in str(e):
-            st.session_state.firebase_initialized = True
-        else:
-            st.error(f"🔥 Failed to initialize Firebase: {str(e)}")
-            st.stop()
+        firebase_credentials = json.loads(FIREBASE_KEY_JSON)
 
-# Firestore client
-if "db" not in st.session_state:
-    try:
-        st.session_state.db = firestore.client()
+        if not firebase_admin._apps:
+            cred = credentials.Certificate(firebase_credentials)
+            firebase_admin.initialize_app(cred)
+
+        return firestore.client()
     except Exception as e:
-        st.error(f"🔥 Failed to connect to Firestore: {str(e)}")
-        st.stop()
+        raise Exception(f"Error initializing Firebase: {e}")
 
-def upload_to_firebase(document_id, entry):
-    db = st.session_state.db  # Get Firestore client from session_state
-    collection_name = FIREBASE_COLLECTION_NAME
+def upload_to_firebase(db, document_id, entry):
+    global FIREBASE_COLLECTION_NAME  # Access the global variable
+    
+    if FIREBASE_COLLECTION_NAME is None:
+        raise ValueError("FIREBASE_COLLECTION_NAME is not set.")
+    
+    db.collection(FIREBASE_COLLECTION_NAME).document(document_id).set(entry, merge=True) 
+    return "Data uploaded to Firebase."
 
-    if collection_name is None:
-        raise ValueError("❌ FIREBASE_COLLECTION_NAME is not set.")
+# utils/firebase_operations.py
 
-    db.collection(collection_name).document(document_id).set(entry, merge=True)
-    return "✅ Data uploaded to Firebase."
-
-def load_last_page(document_id):
-    db = st.session_state.db
-    collection_name = FIREBASE_COLLECTION_NAME
+def load_last_page(db, document_id):
+    collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]  # Get collection name from secrets
+    
+    # Check if the document ID exists in the database
     if document_id:
         user_data = db.collection(collection_name).document(document_id).get()
         if user_data.exists:
-            return user_data.to_dict().get("last_page", "welcome")
-    return "welcome"
+            return user_data.to_dict().get("last_page")  # Return the last_page if found
+    return "welcome"  # Default to 'welcome' if no last_page is found
 
-def get_diagnoses_from_firebase(document_id):
-    db = st.session_state.db
-    collection_name = FIREBASE_COLLECTION_NAME
+# Example function to retrieve diagnoses from Firebase
+
+def get_diagnoses_from_firebase(db, document_id):
+    collection_name = st.secrets["FIREBASE_COLLECTION_NAME"]
     doc_ref = db.collection(collection_name).document(document_id)
+    
+    # Get the document from Firebase
     user_data = doc_ref.get()
-    return user_data.to_dict().get("diagnoses_s1") if user_data.exists else None
+    
+    if user_data.exists:
+        # Retrieve the diagnoses data (if it exists)
+        diagnoses = user_data.to_dict().get("diagnoses_s1", None)
+        return diagnoses  # Return the stored diagnoses data
+    return None  # No data found
 
