@@ -9,6 +9,7 @@ import json
 # --- Firebase Initialization ---
 # Get Firebase credentials and collection name from st.secrets
 firebase_key = st.secrets.get("firebase")
+st.write("Type of firebase_key:", type(firebase_key))
 collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
 
 if firebase_key is None:
