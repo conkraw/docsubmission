@@ -31,10 +31,13 @@ def process_file(uploaded_file):
         "documentation_submission_2_timestamp": "peddoclate2"
     }
 
+    timestamp_col = None  # Track which timestamp column is used
+
     for original_col, new_col in timestamp_mapping.items():
         if original_col in df.columns:
             # Rename the column
             df = df.rename(columns={original_col: new_col})
+            timestamp_col = new_col  # Store the selected timestamp column
 
             # Convert to datetime
             df[new_col] = pd.to_datetime(df[new_col], errors="coerce")
@@ -47,6 +50,12 @@ def process_file(uploaded_file):
 
     # Drop the original email column before downloading
     df = df.drop(columns=[email_column_name])
+
+    # If there are duplicate record_ids, keep the one with the latest (max) timestamp
+    if timestamp_col:
+        df["timestamp_sort"] = pd.to_datetime(df[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce")
+        df = df.sort_values(by="timestamp_sort", ascending=False).drop_duplicates(subset=["record_id"], keep="first")
+        df = df.drop(columns=["timestamp_sort"])  # Remove the helper column after sorting
 
     return df
 
