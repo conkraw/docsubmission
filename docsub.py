@@ -2,6 +2,37 @@ import streamlit as st
 import pandas as pd
 import io
 import pytz
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, firestore
+import random
+import string
+
+st.title("Firebase Communication Test")
+
+try:
+    cred = credentials.Certificate(st.secrets["firebase_service_account"])
+    firebase_admin.initialize_app(cred)
+except ValueError:
+    # Firebase may already be initialized in a Streamlit session.
+    pass
+
+db = firestore.client()
+
+# Generate a random string to upload
+def generate_random_string(length=16):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+random_string = generate_random_string()
+
+st.write("Random string generated:", random_string)
+
+if st.button("Upload Random String to Firebase"):
+    # Create a new document in the "test_messages" collection
+    doc_ref = db.collection("test_messages").document()  # Firestore auto-generates an ID
+    doc_ref.set({"message": random_string})
+    st.success("Random string uploaded to Firebase!")
+    
 
 # Function to process the uploaded file
 def process_file(uploaded_file):
