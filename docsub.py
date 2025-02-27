@@ -10,17 +10,20 @@ def get_record_id_mapping():
 def process_file(uploaded_file, record_id_mapping):
     df = pd.read_csv(uploaded_file)
 
-    # Ensure 'email' column exists
-    if 'email' not in df.columns:
-        st.error("No 'email' column found in the uploaded file.")
+    # Ensure there are at least 3 columns
+    if df.shape[1] < 3:
+        st.error("The uploaded file must have at least 3 columns.")
         return None
 
     # Drop existing record_id column if present
     if 'record_id' in df.columns:
         df = df.drop(columns=['record_id'])
 
+    # Get the email column (4th column, index 3)
+    email_column_name = df.columns[3]
+    
     # Map emails to new record_id
-    df['record_id'] = df['email'].map(record_id_mapping)
+    df['record_id'] = df[email_column_name].map(record_id_mapping)
 
     # Move record_id to the front
     cols = ['record_id'] + [col for col in df.columns if col != 'record_id']
