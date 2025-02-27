@@ -11,29 +11,43 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-st.title("Firebase Debug Test")
+st.title("Firebase Initialization Debug")
 
-# Retrieve the firebase secret from st.secrets
+# Retrieve your Firebase key from st.secrets
 firebase_key = st.secrets.get("firebase")
 collection_name = st.secrets.get("FIREBASE_COLLECTION_NAME")
 
-st.write("Type of firebase_key before conversion:", type(firebase_key))
-# If it's an AttrDict, convert to a normal dict.
-if hasattr(firebase_key, "to_dict"):
-    firebase_key = firebase_key.to_dict()
-st.write("Firebase key keys:", list(firebase_key.keys()))
+st.write("Type of firebase_key:", type(firebase_key))
+st.write("Raw firebase_key value:")
+st.text(firebase_key)
 
-# Check for required keys
+# If you're using triple quotes, firebase_key will be a string with actual newline characters.
+if isinstance(firebase_key, str):
+    # Replace literal newline characters with the two-character sequence "\n"
+    firebase_key_fixed = firebase_key.replace("\n", "\\n")
+    st.write("After replacing newlines:")
+    st.text(firebase_key_fixed)
+    try:
+        firebase_creds = json.loads(firebase_key_fixed)
+    except Exception as e:
+        st.error(f"Error parsing firebase_key: {e}")
+        st.stop()
+else:
+    firebase_creds = firebase_key  # if it's already a dict
+
+st.write("Parsed firebase_creds keys:", list(firebase_creds.keys()))
+
+# Check that required keys are present
 required_keys = ["client_email", "token_uri", "private_key", "project_id"]
-missing = [key for key in required_keys if key not in firebase_key]
+missing = [key for key in required_keys if key not in firebase_creds]
 if missing:
     st.error(f"Missing required keys in Firebase credentials: {missing}")
     st.stop()
 
-# Initialize Firebase (only once)
+# Initialize Firebase
 if "firebase_initialized" not in st.session_state:
     try:
-        cred = credentials.Certificate(firebase_key)
+        cred = credentials.Certificate(firebase_creds)
         firebase_admin.initialize_app(cred)
         st.session_state["firebase_initialized"] = True
         st.write("Firebase initialized successfully!")
