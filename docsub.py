@@ -10,9 +10,9 @@ def get_record_id_mapping():
 
         for entry in dataset:
             if "email" in entry and "record_id" in entry:
-                mapping[entry["email"]] = entry["record_id"]
+                mapping[entry["email"].strip().lower()] = entry["record_id"]
             if "email_2" in entry and "record_id" in entry:
-                mapping[entry["email_2"]] = entry["record_id"]
+                mapping[entry["email_2"].strip().lower()] = entry["record_id"]
 
         return mapping
     except KeyError:
@@ -23,20 +23,24 @@ def get_record_id_mapping():
 def process_file(uploaded_file, record_id_mapping):
     df = pd.read_csv(uploaded_file)
 
-    # Ensure there are at least 3 columns
-    if df.shape[1] < 3:
-        st.error("The uploaded file must have at least 3 columns.")
+    # Identify the column containing "email" dynamically
+    email_column_name = next((col for col in df.columns if "email" in col.lower()), None)
+    
+    if email_column_name is None:
+        st.error("No email column found in the uploaded file.")
         return None
 
     # Drop existing record_id column if present
     if 'record_id' in df.columns:
         df = df.drop(columns=['record_id'])
 
-    # Identify email column (3rd column, index 2)
-    email_column_name = df.columns[2]
-    
-    # Map emails to new record_id
-    df['record_id'] = df[email_column_name].map(record_id_mapping)
+    # Map emails to new record_id (handling case-sensitivity)
+    df['record_id'] = df[email_column_name].str.strip().str.lower().map(record_id_mapping)
+
+    # Check if there are unmapped emails
+    unmatched_emails = df[df['record_id'].isna()][email_column_name].unique()
+    if len(unmatched_emails) > 0:
+        st.warning(f"Some emails were not found in the record_id mapping: {unmatched_emails}")
 
     # Move record_id to the front
     cols = ['record_id'] + [col for col in df.columns if col != 'record_id']
