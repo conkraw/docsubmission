@@ -20,7 +20,7 @@ def process_file(uploaded_file, record_id_mapping):
         df = df.drop(columns=['Record ID'])
 
     # Get the email column (4th column, index 3)
-    email_column_name = df.columns[3]
+    email_column_name = df.columns[4]
     
     # Map emails to new record_id
     df['record_id'] = df[email_column_name].map(record_id_mapping)
