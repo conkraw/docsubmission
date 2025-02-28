@@ -4,8 +4,9 @@ import io
 import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
+import openai  # Make sure you have openai installed and configured
 
-# --- Firebase Initialization (same as before) ---
+# --- Firebase Initialization ---
 firebase_creds = st.secrets["firebase_service_account"].to_dict()
 if not firebase_admin._apps:
     cred = credentials.Certificate(firebase_creds)
@@ -53,6 +54,148 @@ age_mapping = {
     83: "29 years", 84: "30 years"
 }
 
+# --- Analysis Functions Using OpenAI API ---
+def analyze_notes_2_v1(row):
+    # Analyze history of present illness
+    statement = row['historyofpresentillness_v1']
+    age = row['agex_v1']  # Already mapped descriptive age from age_v1
+    primary_diagnosis = row['mostlikelydiagnosis_v1']
+    
+    prompt = (
+        f"Assume you are an experienced medical educator evaluating 3rd-year medical students' clinical documentation. "
+        f"Review the following history of present illness for a pediatric patient (age: {age}) with the primary diagnosis of {primary_diagnosis}. "
+        f"Identify the top 3 essential pieces of information missing or inadequately addressed in the documentation. "
+        f"Provide brief constructive feedback on what should be included for a more complete assessment. "
+        f"The statement to review is:\n\"{statement}\"\n"
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
+    )
+    return response['choices'][0]['message']['content']
+
+def analyze_notes_4_v1(row):
+    # Analyze additional history and physical exam details together
+    statement1 = row['additional_hx_v1']
+    statement2 = row['vital_signs_and_growth_v1']
+    statement3 = row['physicalexam_v1']
+    ros = row['reviewofsystems_v1']
+    hpi = row['historyofpresentillness_v1']
+    age = row['agex_v1']
+    primary_diagnosis = row['mostlikelydiagnosis_v1']
+    
+    prompt = (
+        f"Assume you are an experienced medical educator and a harsh grader of medical documentation. "
+        f"Review the additional history, HPI, review of systems, and physical exam findings for a pediatric patient (age: {age}) "
+        f"with the primary diagnosis of {primary_diagnosis}. Based on this, identify the top 3 essential pieces of information missing "
+        f"or inadequately addressed in the documentation. Do not ask for the HPI, primary diagnosis, or physical exam again. "
+        f"The statement to review is:\n\"{statement1}\"\n"
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
+    )
+    return response['choices'][0]['message']['content']
+
+def analyze_notes_9_v1(row):
+    # Analyze physical examination details
+    statement1 = row['vital_signs_and_growth_v1']
+    statement2 = row['physicalexam_v1']
+    hpi = row['historyofpresentillness_v1']
+    age = row['agex_v1']
+    primary_diagnosis = row['mostlikelydiagnosis_v1']
+    
+    prompt = (
+        f"Assume you are an experienced medical educator evaluating 3rd-year medical students' clinical documentation. "
+        f"Review the physical examination of a pediatric patient (age: {age}) with the primary diagnosis of {primary_diagnosis} "
+        f"and the history of present illness (HPI): {hpi}. Identify the top 3 essential pieces of information missing or inadequately addressed in the physical exam. "
+        f"The statement to review is:\n\"{statement1} {statement2}\"\n"
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
+    )
+    return response['choices'][0]['message']['content']
+
+def analyze_notes_12_v1(row):
+    # Analyze diagnostic justifications and overall documentation
+    statement1 = row['additional_hx_v1']
+    statement2 = row['vital_signs_and_growth_v1']
+    statement3 = row['physicalexam_v1']
+    ros = row['reviewofsystems_v1']
+    hpi = row['historyofpresentillness_v1']
+    age = row['agex_v1']
+    dxs = row['dxs_v1']
+    primary_diagnosis = row['mostlikelydiagnosis_v1']
+    primary_diagnosis_justification = row['mostlikelydiagnosisj_v1']
+    secondary_diagnosis = row['seclikelydiagnosis_v1']
+    secondary_diagnosis_justification = row['seclikelydiagnosisj_v1']
+    third_diagnosis = row['thirlikelydiagnosis_v1']
+    third_diagnosis_justification = row['thirlikelydiagnosisj_v1']
+
+    prompt = (
+        f"Assume you are an experienced medical educator and a harsh grader of medical documentation. "
+        f"Review the following information about a pediatric patient (age: {age}):\n\n"
+        f"1. HPI: {hpi}\n"
+        f"2. ROS: {ros}\n"
+        f"3. Physical Exam: {statement2} {statement3}\n"
+        f"4. Additional History: {statement1}\n"
+        f"5. Diagnostic Studies: {dxs}\n"
+        f"6. Primary Diagnosis: {primary_diagnosis} (Justification: {primary_diagnosis_justification})\n"
+        f"7. Secondary Diagnosis: {secondary_diagnosis} (Justification: {secondary_diagnosis_justification})\n"
+        f"8. Tertiary Diagnosis: {third_diagnosis} (Justification: {third_diagnosis_justification})\n\n"
+        f"Based on this information, please evaluate whether:\n"
+        f"- The primary diagnosis has at least three supporting findings from the HPI, ROS, physical exam, or additional history.\n"
+        f"- The justifications for all diagnoses are well-written and logically support the diagnoses.\n\n"
+        f"Please list any findings that do not support the diagnoses and provide brief explanations."
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
+    )
+    return response['choices'][0]['message']['content']
+
+def analyze_notes_15_v1(row):
+    # Analyze grammatical/spelling quality of the documentation
+    statement1 = row['additional_hx_v1']
+    statement2 = row['vital_signs_and_growth_v1']
+    statement3 = row['physicalexam_v1']
+    ros = row['reviewofsystems_v1']
+    hpi = row['historyofpresentillness_v1']
+    age = row['agex_v1']
+    dxs = row['dxs_v1']
+    primary_diagnosis = row['mostlikelydiagnosis_v1']
+    primary_diagnosis_justification = row['mostlikelydiagnosisj_v1']
+    secondary_diagnosis = row['seclikelydiagnosis_v1']
+    secondary_diagnosis_justification = row['seclikelydiagnosisj_v1']
+    third_diagnosis = row['thirlikelydiagnosis_v1']
+    third_diagnosis_justification = row['thirlikelydiagnosisj_v1']
+
+    prompt = (
+        f"Assume you are an experienced medical educator and a harsh grader of medical documentation. "
+        f"Review the following information for a pediatric patient (age: {age}):\n\n"
+        f"1. HPI: {hpi}\n"
+        f"2. ROS: {ros}\n"
+        f"3. Physical Exam: {statement2} {statement3}\n"
+        f"4. Additional History: {statement1}\n"
+        f"5. Diagnostic Studies: {dxs}\n"
+        f"6. Primary Diagnosis: {primary_diagnosis} (Justification: {primary_diagnosis_justification})\n"
+        f"7. Secondary Diagnosis: {secondary_diagnosis} (Justification: {secondary_diagnosis_justification})\n"
+        f"8. Tertiary Diagnosis: {third_diagnosis} (Justification: {third_diagnosis_justification})\n\n"
+        f"Now, check the documentation for grammatical errors, spelling mistakes, and clarity. "
+        f"Show me any sentences that need correction along with your suggested revisions."
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500
+    )
+    return response['choices'][0]['message']['content']
+
 # --- File Processing Function ---
 def process_file(uploaded_file):
     df = pd.read_csv(uploaded_file)
@@ -74,7 +217,7 @@ def process_file(uploaded_file):
         return None
     df["record_id"] = df[email_col].astype(str)
     
-    # Filter out rows whose record_id is already processed (version-specific)
+    # Filter out rows already processed in Firestore (version-specific)
     df = df[~df["record_id"].apply(lambda rid: is_record_processed_version(rid, version))]
     if df.empty:
         st.info("All record_ids in this file have already been processed.")
@@ -100,15 +243,15 @@ def process_file(uploaded_file):
     # Drop the original email column
     df = df.drop(columns=[email_col])
     
-    # Remove duplicate record_ids based on timestamp (if applicable)
+    # Remove duplicate record_ids based on timestamp if applicable
     if timestamp_col:
         df["timestamp_sort"] = pd.to_datetime(df[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce")
         df = df.sort_values(by="timestamp_sort", ascending=False).drop_duplicates(subset=["record_id"], keep="first")
         df = df.drop(columns=["timestamp_sort"])
     
-    # Additional processing for version-specific columns
+    # Additional processing for version-specific columns (here only v1 is implemented)
     if version == "v1":
-        # Process history of present illness
+        # Process HPI, additional history, vital signs/growth and age mapping
         df["historyofpresentillness_v1"] = df["historyofpresentillness_v1"].astype(str)
         df["hpiwords_v1"] = df["historyofpresentillness_v1"].apply(lambda x: len(x.split()))
         df["additional_hx_v1"] = (
@@ -134,41 +277,21 @@ def process_file(uploaded_file):
             'Height: ' + df["height_v1"].astype(str) + ' (' + df["heighttile_v1"].astype(str) + ')\n' +
             'BMI: ' + df["bmi_v1"].astype(str) + ' (' + df["bmitile_v1"].astype(str) + ')'
         )
-        # Process age column (if exists)
+        # Map age values
         if "age_v1" in df.columns:
-            # Ensure age is numeric, then map it using the dictionary
             df["age_v1"] = pd.to_numeric(df["age_v1"], errors="coerce")
             df["agex_v1"] = df["age_v1"].map(age_mapping)
-    elif version == "v2":
-        df["historyofpresentillness_v2"] = df["historyofpresentillness_v2"].astype(str)
-        df["hpiwords_v2"] = df["historyofpresentillness_v2"].apply(lambda x: len(x.split()))
-        df["additional_hx_v2"] = (
-            'Past Medical History: ' + df["pmhx_v2"].fillna('') + '\n' +
-            'Past Surgical History: ' + df["pshx_v2"].fillna('') + '\n' +
-            'Family History: ' + df["famhx_v2"].fillna('') + '\n' +
-            'Dietary History: ' + df["diet_v2"].fillna('') + '\n' +
-            'Birth History: ' + df["birthhx_v2"].fillna('') + '\n' +
-            'Developmental History: ' + df["dev_v2"].fillna('') + '\n' +
-            'Social History: ' + df["soc_hx_features_v2"].fillna('') + '\n' +
-            'Medications: ' + df["med_v2"].fillna('') + '\n' +
-            'Allergies: ' + df["all_v2"].fillna('') + '\n' +
-            'Immunizations: ' + df["imm_v2"].fillna('') + '\n'
-        )
-        df["vital_signs_and_growth_v2"] = (
-            'Temperature: ' + df["temp_v2"].astype(str) + '\n' +
-            'Heart Rate: ' + df["hr_v2"].astype(str) + '\n' +
-            'Respiratory Rate: ' + df["rr_v2"].astype(str) + '\n' +
-            'Pulse Oximetry: ' + df["pulseox_v2"].astype(str) + '\n' +
-            'Systolic Blood Pressure: ' + df["sbp_v2"].astype(str) + '\n' +
-            'Diastolic Blood Pressure: ' + df["dbp_v2"].astype(str) + '\n' +
-            'Weight: ' + df["weight_v2"].astype(str) + ' (' + df["weighttile_v2"].astype(str) + ')\n' +
-            'Height: ' + df["height_v2"].astype(str) + ' (' + df["heighttile_v2"].astype(str) + ')\n' +
-            'BMI: ' + df["bmi_v2"].astype(str) + ' (' + df["bmitile_v2"].astype(str) + ')'
-        )
-        # Process age column (if exists)
-        if "age_v2" in df.columns:
-            df["age_v2"] = pd.to_numeric(df["age_v2"], errors="coerce")
-            df["agex_v2"] = df["age_v2"].map(age_mapping)
+    
+    # (For v2, you would replicate similar logic with _v2 columns.)
+    
+    # Now apply the analysis functions (for v1) on each row.
+    # Be aware: these API calls may be slow and consume tokens.
+    st.info("Running analysis on new records... (this may take a while)")
+    df["notes_2_v1"] = df.apply(analyze_notes_2_v1, axis=1)
+    df["notes_4_v1"] = df.apply(analyze_notes_4_v1, axis=1)
+    df["notes_9_v1"] = df.apply(analyze_notes_9_v1, axis=1)
+    df["notes_12_v1"] = df.apply(analyze_notes_12_v1, axis=1)
+    df["notes_15_v1"] = df.apply(analyze_notes_15_v1, axis=1)
     
     # Mark each new record as processed in Firestore (version-specific)
     for record_id in df["record_id"]:
@@ -177,7 +300,7 @@ def process_file(uploaded_file):
     return df, version
 
 # --- Streamlit App UI ---
-st.title("CSV Processor with Version-Specific Firestore Check")
+st.title("CSV Processor with Analysis & Version-Specific Firestore Check")
 
 uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 if uploaded_file:
