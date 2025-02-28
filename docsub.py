@@ -5,13 +5,17 @@ import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Initialize Firebase using credentials from st.secrets
-try:
-    cred = credentials.Certificate(st.secrets["firebase_service_account"])
-    firebase_admin.initialize_app(cred)
-except ValueError:
-    # Firebase is already initialized in this session
-    pass
+import firebase_admin
+from firebase_admin import credentials, firestore
+import streamlit as st
+
+# Only initialize if no app exists
+if not firebase_admin._apps:
+    try:
+        cred = credentials.Certificate(st.secrets["firebase_service_account"])
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        st.error(f"Failed to initialize Firebase: {e}")
 
 db = firestore.client()
 
