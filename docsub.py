@@ -8,13 +8,13 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import exceptions
 
-
-# This will be a dict, not a string.
+# This will automatically load your secrets as a dict.
 cred = credentials.Certificate(st.secrets["firebase_service_account"])
 if not firebase_admin._apps:
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
+
 
 
 # Check if a record_id has been processed already (exists in Firestore)
