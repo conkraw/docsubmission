@@ -94,6 +94,13 @@ if uploaded_file:
         st.success("File processed successfully!")
         st.dataframe(df_processed)
 
+        # Determine file name based on presence of '_v1' or '_v2' in any column names
+        file_name = "processed_file.csv"
+        if any("_v1" in col for col in df_processed.columns):
+            file_name = "processed_file_v1.csv"
+        elif any("_v2" in col for col in df_processed.columns):
+            file_name = "processed_file_v2.csv"
+
         # Prepare the processed dataframe for download
         buffer = io.BytesIO()
         df_processed.to_csv(buffer, index=False)
@@ -101,6 +108,7 @@ if uploaded_file:
         st.download_button(
             label="Download Processed CSV",
             data=buffer,
-            file_name="processed_file.csv",
+            file_name=file_name,
             mime="text/csv"
         )
+
