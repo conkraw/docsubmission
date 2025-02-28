@@ -6,6 +6,8 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import openai  # Make sure you have openai installed and configured
 
+openai.api_key = st.secrets["openai"]["api_key"]
+
 # --- Firebase Initialization ---
 firebase_creds = st.secrets["firebase_service_account"].to_dict()
 if not firebase_admin._apps:
