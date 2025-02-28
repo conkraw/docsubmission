@@ -1,125 +1,140 @@
-import streamlit as st
 import pandas as pd
-import io
-import pytz
+import openai  # (if needed for further processing)
 import firebase_admin
 from firebase_admin import credentials, firestore
+import json
 
-# Initialize Firebase using credentials from st.secrets
+# Initialize Firebase using credentials from Streamlit secrets (or similar secure storage)
 try:
-    cred = credentials.Certificate(st.secrets["firebase_service_account"])
+    cred = credentials.Certificate(json.loads(st.secrets["firebase_service_account_json"]))
     firebase_admin.initialize_app(cred)
-except ValueError:
-    # Firebase already initialized in this session
+except Exception:
+    # Firebase may already be initialized
     pass
 
 db = firestore.client()
 
-# Function to determine version based on DataFrame columns
+# --- Helper Functions ---
+
 def determine_version(df):
-    if any("_v2" in col for col in df.columns):
+    """
+    Determine the version from the DataFrame columns.
+    Returns 'v2' if any column ends with '_v2', otherwise 'v1' if any column ends with '_v1'.
+    If neither is found, returns None.
+    """
+    if any(col.endswith('_v2') for col in df.columns):
         return "v2"
-    elif any("_v1" in col for col in df.columns):
+    elif any(col.endswith('_v1') for col in df.columns):
         return "v1"
     else:
-        return None  # or set a default version if desired
+        return None
 
-# Check if a record_id has been processed in the specified version collection
 def is_record_processed(record_id, version):
+    """
+    Check in the version-specific collection if a record_id has been processed.
+    """
     doc_ref = db.collection(f"processed_records_{version}").document(record_id)
     return doc_ref.get().exists
 
-# Mark a record_id as processed in the specified version collection
 def mark_record_as_processed(record_id, version):
+    """
+    Mark a record_id as processed in the version-specific Firebase collection.
+    """
     doc_ref = db.collection(f"processed_records_{version}").document(record_id)
     doc_ref.set({"processed": True})
 
-# Function to process the uploaded file
-def process_file(uploaded_file):
-    df = pd.read_csv(uploaded_file)
+# --- Main Processing Code ---
 
-    # Determine version based on column names (_v1 or _v2)
-    version = determine_version(df)
-    if version is None:
-        st.error("No version indicator (_v1 or _v2) found in the columns.")
-        return None
+# Replace FILENAME with your CSV file path
+FILENAME = 'PEDIATRICDOCUMENTATI_DATA_2025-02-27_2102.csv'
+data = pd.read_csv(FILENAME)
 
-    # Drop existing record_id column if present
-    if "record_id" in df.columns:
-        df = df.drop(columns=["record_id"])
+# Determine file version based on column names
+version = determine_version(data)
+if version is None:
+    raise ValueError("No version indicator (_v1 or _v2) found in the columns.")
 
-    # Dynamically identify the email column to use as record_id
-    email_column_name = next((col for col in df.columns if "email" in col.lower()), None)
-    if email_column_name is None:
-        st.error("No email column found in the uploaded file.")
-        return None
+# Ensure we have a record_id. If missing, try to use an email column.
+if "record_id" not in data.columns:
+    email_col = next((col for col in data.columns if "email" in col.lower()), None)
+    if email_col is None:
+        raise ValueError("No record_id or email column found to uniquely identify rows.")
+    data["record_id"] = data[email_col].astype(str)
 
-    # Rename the email column to record_id and convert it to string
-    df["record_id"] = df[email_column_name].astype(str)
+# Filter out rows with record_ids that have already been processed in the version-specific collection.
+data = data[~data["record_id"].apply(lambda rid: is_record_processed(rid, version))]
+if data.empty:
+    print("All record_ids in this file have already been processed. Exiting.")
+    exit()
 
-    # Filter out record_ids that have already been processed in the version-specific collection
-    df = df[~df["record_id"].apply(lambda rid: is_record_processed(rid, version))]
-    if df.empty:
-        st.info("All record_ids in this file have already been processed.")
-        return None
+# Define dynamic column names using the version suffix.
+hpi_col       = f"historyofpresentillness_{version}"
+pmhx_col      = f"pmhx_{version}"
+pshx_col      = f"pshx_{version}"
+famhx_col     = f"famhx_{version}"
+diet_col      = f"diet_{version}"
+birthhx_col   = f"birthhx_{version}"
+dev_col       = f"dev_{version}"
+soc_col       = f"soc_hx_features_{version}"
+med_col       = f"med_{version}"
+all_col       = f"all_{version}"
+imm_col       = f"imm_{version}"
 
-    # Move record_id to the front of the DataFrame
-    cols = ["record_id"] + [col for col in df.columns if col != "record_id"]
-    df = df[cols]
+temp_col      = f"temp_{version}"
+hr_col        = f"hr_{version}"
+rr_col        = f"rr_{version}"
+pulseox_col   = f"pulseox_{version}"
+sbp_col       = f"sbp_{version}"
+dbp_col       = f"dbp_{version}"
+weight_col    = f"weight_{version}"
+weighttile_col= f"weighttile_{version}"
+height_col    = f"height_{version}"
+heighttile_col= f"heighttile_{version}"
+bmi_col       = f"bmi_{version}"
+bmitile_col   = f"bmitile_{version}"
 
-    # Handle timestamp conversion for possible timestamp columns
-    timestamp_mapping = {
-        "documentation_submission_1_timestamp": "peddoclate1",
-        "documentation_submission_2_timestamp": "peddoclate2"
-    }
-    timestamp_col = None
-    for original_col, new_col in timestamp_mapping.items():
-        if original_col in df.columns:
-            df = df.rename(columns={original_col: new_col})
-            timestamp_col = new_col
-            # Convert to datetime, localize to UTC, then convert to Eastern Time
-            df[new_col] = pd.to_datetime(df[new_col], errors="coerce")
-            df[new_col] = df[new_col].dt.tz_localize("UTC").dt.tz_convert("US/Eastern")
-            df[new_col] = df[new_col].dt.strftime("%m-%d-%Y %H:%M")
+# --- Transformation Steps ---
 
-    # Drop the original email column before download
-    df = df.drop(columns=[email_column_name])
+# Convert the HPI column to string and compute its word count.
+data[hpi_col] = data[hpi_col].astype(str)
+data[f"hpiwords_{version}"] = data[hpi_col].apply(lambda x: len(x.split()))
 
-    # If duplicate record_ids exist, keep the one with the latest timestamp
-    if timestamp_col:
-        df["timestamp_sort"] = pd.to_datetime(df[timestamp_col], format="%m-%d-%Y %H:%M", errors="coerce")
-        df = df.sort_values(by="timestamp_sort", ascending=False).drop_duplicates(subset=["record_id"], keep="first")
-        df = df.drop(columns=["timestamp_sort"])
+# Create the 'additional_hx' column by concatenating various history fields.
+data[f"additional_hx_{version}"] = (
+    'Past Medical History: ' + data[pmhx_col].fillna('') + '\n' +
+    'Past Surgical History: ' + data[pshx_col].fillna('') + '\n' +
+    'Family History: ' + data[famhx_col].fillna('') + '\n' +
+    'Dietary History: ' + data[diet_col].fillna('') + '\n' +
+    'Birth History: ' + data[birthhx_col].fillna('') + '\n' +
+    'Developmental History: ' + data[dev_col].fillna('') + '\n' +
+    'Social History: ' + data[soc_col].fillna('') + '\n' +
+    'Medications: ' + data[med_col].fillna('') + '\n' +
+    'Allergies: ' + data[all_col].fillna('') + '\n' + 
+    'Immunizations: ' + data[imm_col].fillna('') + '\n'
+)
 
-    # Mark each processed record_id in Firebase in the version-specific collection
-    for record_id in df["record_id"]:
-        mark_record_as_processed(record_id, version)
+# Create the 'vital_signs_and_growth' column by concatenating various vital signs and growth parameters.
+data[f"vital_signs_and_growth_{version}"] = (
+    'Temperature: ' + data[temp_col].astype(str) + '\n' +
+    'Heart Rate: ' + data[hr_col].astype(str) + '\n' +
+    'Respiratory Rate: ' + data[rr_col].astype(str) + '\n' +
+    'Pulse Oximetry: ' + data[pulseox_col].astype(str) + '\n' +
+    'Systolic Blood Pressure: ' + data[sbp_col].astype(str) + '\n' +
+    'Diastolic Blood Pressure: ' + data[dbp_col].astype(str) + '\n' +
+    'Weight: ' + data[weight_col].astype(str) + ' (' + data[weighttile_col].astype(str) + ')\n' +
+    'Height: ' + data[height_col].astype(str) + ' (' + data[heighttile_col].astype(str) + ')\n' +
+    'BMI: ' + data[bmi_col].astype(str) + ' (' + data[bmitile_col].astype(str) + ')'
+)
 
-    return df, version
+# (Optional) Drop any columns you don't want to keep – for example, the original email column
+# if "email" in data.columns:
+#     data = data.drop(columns=["email"])
 
-# Streamlit App UI
-st.title("CSV Processor with Version-Specific Firebase Record Check")
+# Mark each processed record_id as processed in Firebase (in the version-specific collection)
+for rid in data["record_id"]:
+    mark_record_as_processed(rid, version)
 
-uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-
-if uploaded_file:
-    result = process_file(uploaded_file)
-    if result is not None:
-        df_processed, version = result
-        st.success("File processed successfully!")
-        st.dataframe(df_processed)
-
-        # Set download file name based on version
-        file_name = f"processed_file_{version}.csv"
-
-        # Prepare the processed DataFrame for download
-        buffer = io.BytesIO()
-        df_processed.to_csv(buffer, index=False)
-        buffer.seek(0)
-        st.download_button(
-            label="Download Processed CSV",
-            data=buffer,
-            file_name=file_name,
-            mime="text/csv"
-        )
-
+# Save the processed data to a new CSV file.
+output_filename = f"processed_{FILENAME.split('.')[0]}_{version}.csv"
+data.to_csv(output_filename, index=False)
+print(f"Processed file saved as {output_filename}")
