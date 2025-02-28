@@ -4,6 +4,9 @@ import io
 import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import exceptions
 
 # Initialize Firebase using credentials from st.secrets
 try:
