@@ -9,15 +9,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import streamlit as st
 
-# Only initialize if no app exists
+# Initialize Firebase if not already initialized
 if not firebase_admin._apps:
     try:
+        # st.secrets["firebase_service_account"] should load as a dict from your TOML table
         cred = credentials.Certificate(st.secrets["firebase_service_account"])
         firebase_admin.initialize_app(cred)
     except Exception as e:
         st.error(f"Failed to initialize Firebase: {e}")
 
 db = firestore.client()
+
 
 # Check if a record_id has been processed already (exists in Firestore)
 def is_record_processed(record_id):
