@@ -5,37 +5,15 @@ import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-import streamlit as st
-import firebase_admin
-from firebase_admin import credentials, firestore
-import random
-import string
-
-st.title("Firebase Communication Test")
+# Initialize Firebase using credentials from st.secrets
 try:
     cred = credentials.Certificate(st.secrets["firebase_service_account"])
     firebase_admin.initialize_app(cred)
 except ValueError:
-    # Firebase may already be initialized in a Streamlit session.
+    # Firebase is already initialized in this session
     pass
 
 db = firestore.client()
-
-# Generate a random string to upload
-def generate_random_string(length=16):
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
-
-random_string = generate_random_string()
-
-st.write("Random string generated:", random_string)
-
-if st.button("Upload Random String to Firebase"):
-    # Create a new document in the "test_messages" collection
-    doc_ref = db.collection("test_messages").document()  # Firestore auto-generates an ID
-    doc_ref.set({"message": random_string})
-    st.success("Random string uploaded to Firebase!")
-
-
 
 # Check if a record_id has been processed already (exists in Firestore)
 def is_record_processed(record_id):
