@@ -5,16 +5,15 @@ import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-
-# Initialize Firebase if not already initialized.
+# Check if an app is already initialized; if not, initialize it.
 try:
+    firebase_admin.get_app()
+except ValueError:
     cred = credentials.Certificate(st.secrets["firebase_service_account"])
     firebase_admin.initialize_app(cred)
-except ValueError:
-    # App already initialized
-    pass
 
 db = firestore.client()
+
 
 # Function to determine version based on DataFrame columns
 def determine_version(df):
