@@ -13,20 +13,14 @@ import streamlit as st
 from firebase_admin import credentials, firestore, initialize_app
 import firebase_admin
 
-cred_val = st.secrets["firebase_service_account"]
-if isinstance(cred_val, str):
-    try:
-        cred_val = ast.literal_eval(cred_val)
-    except Exception as e:
-        st.error(f"Error parsing credentials: {e}")
-        raise e
+import os
+import json
+from firebase_admin import credentials, initialize_app
 
-try:
-    firebase_admin.get_app()
-except ValueError:
-    initialize_app(credentials.Certificate(cred_val))
-
-db = firestore.client()
+# Assuming you stored the JSON string in a secret called FIREBASE_SERVICE_ACCOUNT
+firebase_creds = json.loads(os.environ.get("FIREBASE_SERVICE_ACCOUNT"))
+cred = credentials.Certificate(firebase_creds)
+initialize_app(cred)
 
 
 # Check if a record_id has been processed already (exists in Firestore)
