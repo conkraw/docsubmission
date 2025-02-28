@@ -8,19 +8,13 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import exceptions
 
-import ast
-import streamlit as st
-from firebase_admin import credentials, firestore, initialize_app
-import firebase_admin
 
-import os
-import json
-from firebase_admin import credentials, initialize_app
+# This will be a dict, not a string.
+cred = credentials.Certificate(st.secrets["firebase_service_account"])
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred)
 
-# Assuming you stored the JSON string in a secret called FIREBASE_SERVICE_ACCOUNT
-firebase_creds = json.loads(os.environ.get("FIREBASE_SERVICE_ACCOUNT"))
-cred = credentials.Certificate(firebase_creds)
-initialize_app(cred)
+db = firestore.client()
 
 
 # Check if a record_id has been processed already (exists in Firestore)
