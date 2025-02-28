@@ -8,16 +8,26 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import exceptions
 
-try:
-    app = firebase_admin.get_app()
-except ValueError as e:
-    if "The default Firebase app does not exist" in str(e):
-        cred = credentials.Certificate(st.secrets["firebase_service_account"])
-        app = firebase_admin.initialize_app(cred)
-    else:
+import ast
+import streamlit as st
+from firebase_admin import credentials, firestore, initialize_app
+import firebase_admin
+
+cred_val = st.secrets["firebase_service_account"]
+if isinstance(cred_val, str):
+    try:
+        cred_val = ast.literal_eval(cred_val)
+    except Exception as e:
+        st.error(f"Error parsing credentials: {e}")
         raise e
 
+try:
+    firebase_admin.get_app()
+except ValueError:
+    initialize_app(credentials.Certificate(cred_val))
+
 db = firestore.client()
+
 
 # Check if a record_id has been processed already (exists in Firestore)
 def is_record_processed(record_id):
