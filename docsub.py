@@ -301,6 +301,7 @@ def process_file(uploaded_file):
     
     return df, version
 
+
 # --- Streamlit App UI ---
 st.title("CSV Processor with Analysis & Version-Specific Firestore Check")
 
@@ -310,16 +311,33 @@ if uploaded_file:
     if result is not None:
         df_processed, version = result
         st.success("File processed successfully!")
+        
+        # Display the processed DataFrame (including extra columns)
         st.dataframe(df_processed)
+
+        # Determine which columns to remove based on the version
+        if version == "v1":
+            columns_to_remove = ["additional_hx_v1", "vital_signs_and_growth_v1", "agex_v1"]
+        elif version == "v2":
+            columns_to_remove = ["additional_hx_v2", "vital_signs_and_growth_v2", "agex_v2"]
+        else:
+            columns_to_remove = []
+
+        # Drop these columns before downloading
+        for col in columns_to_remove:
+            if col in df_processed.columns:
+                df_processed.drop(columns=[col], inplace=True)
+
+        # Prepare the final DataFrame for download
         output_filename = f"processed_file_{version}.csv"
         buffer = io.BytesIO()
         df_processed.to_csv(buffer, index=False)
         buffer.seek(0)
+        
         st.download_button(
             label="Download Processed CSV",
             data=buffer,
             file_name=output_filename,
             mime="text/csv"
         )
-
 
