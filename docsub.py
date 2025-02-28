@@ -5,17 +5,27 @@ import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Check if a default app exists; if not, initialize it
-try:
-    app = firebase_admin.get_app()
-except ValueError:
-    # This means no default app exists, so initialize one.
-    # Ensure that st.secrets["firebase_service_account"] is a dict from a properly formatted TOML file.
-    app = firebase_admin.initialize_app(
-        credentials.Certificate(st.secrets["firebase_service_account"])
-    )
+import ast
+import firebase_admin
+from firebase_admin import credentials, firestore
+import streamlit as st
 
-db = firestore.client(app=app)
+# Retrieve the credentials from st.secrets.
+cred_val = st.secrets["firebase_service_account"]
+
+# If it's a string, convert it to a dictionary.
+if isinstance(cred_val, str):
+    cred_val = ast.literal_eval(cred_val)
+
+# Now, pass the dictionary to credentials.Certificate().
+try:
+    # Initialize Firebase if not already initialized
+    firebase_admin.get_app()
+except ValueError:
+    firebase_admin.initialize_app(credentials.Certificate(cred_val))
+
+db = firestore.client()
+
 
 
 # Check if a record_id has been processed already (exists in Firestore)
