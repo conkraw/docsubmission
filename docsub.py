@@ -5,26 +5,35 @@ import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-import ast
+import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
-import streamlit as st
+import random
+import string
 
-# Retrieve the credentials from st.secrets.
-cred_val = st.secrets["firebase_service_account"]
-
-# If it's a string, convert it to a dictionary.
-if isinstance(cred_val, str):
-    cred_val = ast.literal_eval(cred_val)
-
-# Now, pass the dictionary to credentials.Certificate().
+st.title("Firebase Communication Test")
 try:
-    # Initialize Firebase if not already initialized
-    firebase_admin.get_app()
+    cred = credentials.Certificate(st.secrets["firebase_service_account"])
+    firebase_admin.initialize_app(cred)
 except ValueError:
-    firebase_admin.initialize_app(credentials.Certificate(cred_val))
+    # Firebase may already be initialized in a Streamlit session.
+    pass
 
 db = firestore.client()
+
+# Generate a random string to upload
+def generate_random_string(length=16):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+random_string = generate_random_string()
+
+st.write("Random string generated:", random_string)
+
+if st.button("Upload Random String to Firebase"):
+    # Create a new document in the "test_messages" collection
+    doc_ref = db.collection("test_messages").document()  # Firestore auto-generates an ID
+    doc_ref.set({"message": random_string})
+    st.success("Random string uploaded to Firebase!")
 
 
 
