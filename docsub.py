@@ -8,12 +8,20 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import exceptions
 
-# This will automatically load your secrets as a dict.
-cred = credentials.Certificate(st.secrets["firebase_service_account"])
+import ast
+import streamlit as st
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+cred_val = st.secrets["firebase_service_account"]
+if isinstance(cred_val, str):
+    cred_val = ast.literal_eval(cred_val)
+
 if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
+    firebase_admin.initialize_app(credentials.Certificate(cred_val))
 
 db = firestore.client()
+
 
 
 
