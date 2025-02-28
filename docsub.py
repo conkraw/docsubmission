@@ -248,7 +248,7 @@ def analyze_notes_2_v2(row):
 # 8) PROCESS FILE
 #############################
 def process_file(uploaded_file):
-    df = pd.read_csv(uploaded_file)
+    df = pd.read_csv(uploaded_file, dtype=str)
 
     # 1) Determine version
     version = determine_version(df)
