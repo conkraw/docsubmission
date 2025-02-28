@@ -5,21 +5,15 @@ import pytz
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-import firebase_admin
-from firebase_admin import credentials, firestore
-import streamlit as st
-
-# Initialize Firebase if not already initialized
-if not firebase_admin._apps:
-    try:
-        # st.secrets["firebase_service_account"] should load as a dict from your TOML table
-        cred = credentials.Certificate(st.secrets["firebase_service_account"])
-        firebase_admin.initialize_app(cred)
-    except Exception as e:
-        st.error(f"Failed to initialize Firebase: {e}")
+# Initialize Firebase using credentials from st.secrets
+try:
+    cred = credentials.Certificate(st.secrets["firebase_service_account"])
+    firebase_admin.initialize_app(cred)
+except ValueError:
+    # Firebase is already initialized in this session
+    pass
 
 db = firestore.client()
-
 
 # Check if a record_id has been processed already (exists in Firestore)
 def is_record_processed(record_id):
@@ -100,13 +94,6 @@ if uploaded_file:
         st.success("File processed successfully!")
         st.dataframe(df_processed)
 
-        # Determine file name based on presence of '_v1' or '_v2' in any column names
-        file_name = "processed_file.csv"
-        if any("_v1" in col for col in df_processed.columns):
-            file_name = "processed_file_v1.csv"
-        elif any("_v2" in col for col in df_processed.columns):
-            file_name = "processed_file_v2.csv"
-
         # Prepare the processed dataframe for download
         buffer = io.BytesIO()
         df_processed.to_csv(buffer, index=False)
@@ -114,7 +101,6 @@ if uploaded_file:
         st.download_button(
             label="Download Processed CSV",
             data=buffer,
-            file_name=file_name,
+            file_name="processed_file.csv",
             mime="text/csv"
         )
-
