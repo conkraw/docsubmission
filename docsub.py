@@ -8,13 +8,14 @@ import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import exceptions
 
-# Initialize Firebase using credentials from st.secrets
 try:
-    cred = credentials.Certificate(st.secrets["firebase_service_account"])
-    firebase_admin.initialize_app(cred)
-except ValueError:
-    # Firebase is already initialized in this session
-    pass
+    app = firebase_admin.get_app()
+except ValueError as e:
+    if "The default Firebase app does not exist" in str(e):
+        cred = credentials.Certificate(st.secrets["firebase_service_account"])
+        app = firebase_admin.initialize_app(cred)
+    else:
+        raise e
 
 db = firestore.client()
 
