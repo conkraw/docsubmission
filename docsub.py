@@ -373,8 +373,8 @@ def process_file(uploaded_file):
         st.error("No email column found.")
         return None
 
-    hpi_col = f"hpi{version}"
-    hpiwords_col = f"hpiwords{version}"
+    hpi_col = f"hpi_{version}"
+    hpiwords_col = f"hpiwords_{version}"
     
     # Check if the history of present illness column exists
     if hpi_col in df.columns:
