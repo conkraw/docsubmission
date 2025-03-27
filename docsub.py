@@ -373,6 +373,16 @@ def process_file(uploaded_file):
         st.error("No email column found.")
         return None
 
+    hpi_col = f"historyofpresentillness{version}"
+    hpiwords_col = f"hpiwords{version}"
+    
+    # Check if the history of present illness column exists
+    if hpi_col in df.columns:
+        df[hpiwords_col] = df[hpi_col].apply(lambda x: len(x.split()) if isinstance(x, str) else 0)
+    else:
+        st.error(f"Expected column '{hpi_col}' not found.")
+        return None
+
     df["record_id"] = df[email_col].astype(str)
 
     # Filter out processed
@@ -421,6 +431,8 @@ def process_file(uploaded_file):
     for col in text_cols_to_fix:
         if col in df.columns:
             df[col] = df[col].apply(insert_line_breaks)
+
+
 
     # 6) Build additional columns (like additional_hx_{version}, vital_signs_and_growth_{version})
     build_additional_columns(df, version)
