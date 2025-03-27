@@ -408,7 +408,7 @@ def process_file(uploaded_file):
     # 4) Convert age_{version} to numeric, then map to agex_{version}
     age_col = f"age_{version}"
     if age_col in df.columns:
-        df[age_col] = pd.to_numeric(df[age_col], errors="coerce")
+        df[age_col] = pd.to_numeric(df[age_col], errors="coerce").astype('Int64') 
         df[f"agex_{version}"] = df[age_col].map(age_mapping)
 
     # 5) Insert line breaks in certain text columns (like physicalexam_{version}, etc.)
