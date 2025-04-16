@@ -355,7 +355,8 @@ def process_file(uploaded_file):
     marks records processed, returns (df, version).
     """
     # 1) Read all as strings to preserve "1" as "1"
-    df = pd.read_csv(uploaded_file, dtype=str)
+    #df = pd.read_csv(uploaded_file, dtype=str)
+    df = pd.read_csv(uploaded_file, dtype=str, keep_default_na=False,na_filter=False)
 
     # 2) Determine version
     version = determine_version(df)
