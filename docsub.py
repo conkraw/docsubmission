@@ -27,6 +27,13 @@ db = firestore.client()
 def is_record_processed_version(record_id, version):
     collection_name = f"processed_records_{version}"
     doc_ref = db.collection(collection_name).document(record_id)
+
+    # DEBUG
+    print("Firestore path:", doc_ref.path)
+    # or, if you have a logger:
+    # logger.debug(f"Checking document: {doc_ref.path}")
+
+    
     return doc_ref.get().exists
 
 def mark_record_as_processed_version(record_id, version):
